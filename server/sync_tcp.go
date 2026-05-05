@@ -1,3 +1,4 @@
+// Package server provides the user to run synchronous TCP echo server
 package server
 
 import (
@@ -10,9 +11,9 @@ import (
 )
 
 func readCommand(c net.Conn) (string, error) {
-	var buf []byte = make([]byte, 512)
+	buf := make([]byte, 512) // the max size of the message passed to the server can be 512 bytes, make() create a slice
 
-	n, err := c.Read(buf[:])
+	n, err := c.Read(buf[:]) // Read return the size and error and add the command to buf slice
 	if err != nil {
 		return "", err
 	}
@@ -20,7 +21,8 @@ func readCommand(c net.Conn) (string, error) {
 }
 
 func respond(cmd string, c net.Conn) error {
-	if _, err := c.Write([]byte(cmd)); err != nil {
+	_, err := c.Write([]byte(cmd)) // Write the command to the connection. the command will be echoed to the client
+	if err != nil {
 		return err
 	}
 
@@ -30,34 +32,37 @@ func respond(cmd string, c net.Conn) error {
 func RunSyncTCPServer() {
 	log.Println("starting a synchronous TCP server on", config.Host, config.Port)
 
-	con_clients := 0 // number of concurrent clients connected to the server at the moment
-	ln, err := net.Listen("tcp", config.Host+":"+strconv.Itoa(config.Port))
+	conClients := 0                                                         // number of concurrent clients connected to the server at the moment
+	ln, err := net.Listen("tcp", config.Host+":"+strconv.Itoa(config.Port)) // listens tcp connection with port and host from config.go or input flags
 	if err != nil {
 		log.Println(err)
 	}
 
 	for {
-		conn, err := ln.Accept()
+		conn, err := ln.Accept() // accepts the connection
 		if err != nil {
 			panic(err)
 		}
 
-		con_clients += 1
+		conClients += 1 // increment the concurrent clients, it will be never >1. because the server won't accept new connection unless older one is disconnected
 
-		log.Println("connected to new client at address:", conn.RemoteAddr(), "concurrent clients", con_clients)
-		cmd, err := readCommand(conn)
-		if err != nil {
-			conn.Close()
-			con_clients -= 1
-			log.Println("disconnected client", conn.RemoteAddr(), "concurrent clients", con_clients)
-			if err == io.EOF {
-				break
+		log.Println("connected to new client at address:", conn.RemoteAddr(), "concurrent clients", conClients)
+		for {
+			cmd, err := readCommand(conn) // read command sent by the client
+			if err != nil {
+				conn.Close()    // if any error close the connection
+				conClients -= 1 // decrement the number of concurrent clients
+				log.Println("disconnected client", conn.RemoteAddr(), "concurrent clients", conClients)
+				if err == io.EOF {
+					break // break the inner inf for loop when the connection is broken, it will let the server accept new connections
+				}
+				log.Println(err)
 			}
-			log.Println(err)
-		}
-		log.Println("commands", cmd)
-		if err = respond(cmd, conn); err != nil {
-			log.Println("err write: ", err)
+			log.Println("commands", cmd)
+			err = respond(cmd, conn) // echo the commands to the client
+			if err != nil {
+				log.Print("err write: ", err)
+			}
 		}
 
 	}
