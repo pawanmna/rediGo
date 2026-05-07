@@ -123,3 +123,94 @@ This is why Redis is:
 
 1. Single-threaded -> no need for mutexes, semaphores, and waiting
 2. Doing I/O multiplexing -> handling multiple TCP connections concurrently
+
+## Redis Serialization Protocol (RESP)
+
+RESP supports common data types like integers, strings, and arrays, along with a way to convey errors.
+
+Redis sends commands as arrays of strings.
+
+```text
+PUT K V -> ["PUT", "K", "V"]
+```
+
+That array is then serialized using RESP.
+
+### RESP Description
+
+- Redis uses RESP as a request-response protocol.
+- The client sends requests in RESP.
+- The server responds in RESP.
+- Every data type starts with a special character.
+- The data ends with `\r\n` (CRLF).
+
+### Simple Strings
+
+- Simple strings start with `+`.
+- They are followed by the string value, for example `PONG`.
+- They end with `\r\n`.
+- Example: `+PONG\r\n`
+- Minimal overhead because they require `n + 3` bytes in the response.
+
+### Integers
+
+- Integers start with `:`.
+- They are followed by the integer value.
+- They end with `\r\n`.
+- Example: `:1729\r\n`
+
+### Bulk Strings
+
+- Bulk strings start with `$`.
+- They are followed by the number of bytes.
+- They then include `\r\n`.
+- After that comes the actual string.
+- They end with another `\r\n`.
+
+Example:
+
+```text
+$4\r\nPONG\r\n
+```
+
+Why do we need bulk strings if we have simple strings?
+
+1. Simple strings are not binary safe.
+2. Simple strings cannot contain `\r\n`.
+3. Bulk strings can be used to store binary data, even a PNG image.
+
+Some special strings:
+
+- Empty string: `$0\r\n\r\n`
+- Null value: `$-1\r\n`
+
+### Arrays
+
+- Arrays start with `*`.
+- They are followed by the number of elements.
+- They then include `\r\n`.
+- After that come the RESP-encoded elements.
+
+Example:
+
+```text
+['a', 200, "cat"] -> *3\r\n $1\r\na\r\n $3\r\ncat\r\n
+```
+
+- Null arrays: `*-1\r\n`
+- Empty arrays: `*0\r\n`
+- Arrays can also be nested.
+
+### Errors
+
+- Error messages start with `-`.
+- They are followed by the message.
+- They end with `\r\n`.
+- Example: `-Key not found\r\n`
+
+### Key Highlights
+
+1. RESP is human-readable.
+2. Redis is simple, which means fewer bugs.
+3. RESP is performant.
+4. RESP uses prefixed lengths, so we know exactly how many bytes to read and process.
