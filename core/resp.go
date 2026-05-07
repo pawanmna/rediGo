@@ -13,6 +13,28 @@ import (
 // }
 //
 
+// DecodeArrayString is asserting that the inteface are string. (will cause problem if returned value from Decode is not string)
+// the func is for Redis command frames only
+func DecodeArrayString(data []byte) ([]string, error) {
+	value, err := Decode(data)
+	if err != nil {
+		return nil, err
+	}
+	items, ok := value.([]any)
+	if !ok {
+		return nil, fmt.Errorf("expected RESP array")
+	}
+	tokens := make([]string, len(items))
+	for i, item := range items {
+		s, ok := item.(string)
+		if !ok {
+			return nil, fmt.Errorf("expected string at index %d, got %T", i, item)
+		}
+		tokens[i] = s
+	}
+	return tokens, nil
+}
+
 // --- Simple String (+) ---
 func readSimpleString(data []byte) (any, int, error) {
 	// TODO: skip '+', read until \r
@@ -119,4 +141,15 @@ func Decode(data []byte) (any, error) {
 	return val, err
 	// 1. validate input
 	// 2. call DecodeOne
+}
+
+func Encode(arg any, isSimple bool) ([]byte, error) {
+	switch v := arg.(type) {
+	case string:
+		if isSimple {
+			return []byte(fmt.Sprintf("+%s\r\n", v)), nil
+		}
+		return []byte(fmt.Sprintf("$%d\r\n%s\r\n", len(v), v)), nil
+	}
+	return []byte{}, errors.New("empty")
 }

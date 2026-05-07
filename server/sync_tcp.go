@@ -2,28 +2,50 @@
 package server
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"net"
 	"strconv"
+	"strings"
 
 	"github.com/pawanmna/rediGo/config"
+	"github.com/pawanmna/rediGo/core"
 )
 
-func readCommand(c net.Conn) (string, error) {
+func respondError(err error, c net.Conn) {
+	c.Write([]byte(fmt.Sprintf("-%s\r\n", err)))
+}
+
+func readCommand(c net.Conn) (*core.RedisCmd, error) {
 	buf := make([]byte, 512) // the max size of the message passed to the server can be 512 bytes, make() create a slice
 
 	n, err := c.Read(buf[:]) // Read return the size and error and add the command to buf slice
 	if err != nil {
-		return "", err
+		return &core.RedisCmd{
+			Cmd:  "",
+			Args: []string{},
+		}, err
 	}
-	return string(buf[:n]), nil
+	token, err := core.DecodeArrayString(buf[:n])
+	if err != nil {
+		return nil, err
+	}
+	return &core.RedisCmd{
+		Cmd:  strings.ToUpper(token[0]),
+		Args: token[1:],
+	}, nil
 }
 
-func respond(cmd string, c net.Conn) error {
-	_, err := c.Write([]byte(cmd)) // Write the command to the connection. the command will be echoed to the client
+func respond(cmd *core.RedisCmd, c net.Conn) error {
+	resp, err := core.Eval(cmd)
 	if err != nil {
-		return err
+		respondError(err, c)
+	}
+
+	_, err = c.Write(resp)
+	if err != nil {
+		respondError(err, c)
 	}
 
 	return nil
