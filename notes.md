@@ -214,3 +214,5 @@ Example:
 2. Redis is simple, which means fewer bugs.
 3. RESP is performant.
 4. RESP uses prefixed lengths, so we know exactly how many bytes to read and process.
+
+## Event Loops
