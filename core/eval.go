@@ -4,7 +4,7 @@ import "errors"
 
 func evalPing(args []string) ([]byte, error) {
 	if len(args) >= 2 {
-		return nil, errors.New("The number of arguments cannot be > 1 in PING")
+		return nil, errors.New("the number of arguments cannot be > 1 for PING")
 	}
 
 	if len(args) == 0 {
@@ -19,6 +19,6 @@ func Eval(cmd *RedisCmd) ([]byte, error) {
 	case "PING":
 		return evalPing(cmd.Args)
 	default:
-		return evalPing(cmd.Args)
+		return []byte{}, errors.New("unknown command")
 	}
 }

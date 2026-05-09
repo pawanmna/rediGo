@@ -14,7 +14,7 @@ import (
 )
 
 func respondError(err error, c net.Conn) {
-	c.Write([]byte(fmt.Sprintf("-%s\r\n", err)))
+	c.Write((fmt.Appendf(nil, "-%s\r\n", err)))
 }
 
 func readCommand(c net.Conn) (*core.RedisCmd, error) {
@@ -22,10 +22,7 @@ func readCommand(c net.Conn) (*core.RedisCmd, error) {
 
 	n, err := c.Read(buf[:]) // Read return the size and error and add the command to buf slice
 	if err != nil {
-		return &core.RedisCmd{
-			Cmd:  "",
-			Args: []string{},
-		}, err
+		return nil, err
 	}
 	token, err := core.DecodeArrayString(buf[:n])
 	if err != nil {

@@ -216,3 +216,6 @@ Example:
 4. RESP uses prefixed lengths, so we know exactly how many bytes to read and process.
 
 ## Event Loops
+
+no multiple Multi-Threading
+I/O multiplexing: Async I/O Programming
