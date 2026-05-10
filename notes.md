@@ -217,5 +217,43 @@ Example:
 
 ## Event Loops
 
-no multiple Multi-Threading
-I/O multiplexing: Async I/O Programming
+Event loops are based on I/O multiplexing, which is a form of async I/O programming.
+
+- No multi-threading is required.
+- An event loop is neither a separate thread nor a separate process.
+- It is a thin layer that supports I/O handling.
+- It is supported by the kernel.
+
+Common platform-specific mechanisms:
+
+- `epoll` -> GNU/Linux
+- `kqueue` -> BSD / OS X
+- `IOCP` -> Windows
+
+### epoll
+
+- `epoll` monitors many file descriptors for new I/O.
+- Everything is treated like a file descriptor.
+- We pass all file descriptors that need to be monitored.
+
+```text
+client ---DATA--> [network card] --triggers an interrupt--> [[Kernel Buffer]--copy(when process scheduled)--> [User Space]]
+```
+
+### Core Idea
+
+- We continue doing our work.
+- Once in a while, we check whether some file descriptor is ready for I/O.
+- `epoll` and similar mechanisms tell us when that happens.
+- If something is ready, do I/O. Otherwise, continue.
+
+### Working With epoll
+
+- Everything is a file descriptor.
+- Create a new epoller with `epoll_create1`.
+- To know when some I/O is ready, use `epoll_wait`.
+- `epoll_wait` waits for updates on registered file descriptors.
+- It is a blocking call and moves forward only when some file descriptors are ready for I/O.
+- We ask `epoll` to monitor every client connection along with the main server socket.
+- Register and deregister file descriptors like pipes, FIFOs, sockets, `inotify`, and devices using `epoll_ctl`.
+                        
