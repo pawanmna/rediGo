@@ -35,7 +35,7 @@ func readCommand(c io.Reader) (*core.RedisCmd, error) {
 	}, nil
 }
 
-func respond(cmd *core.RedisCmd, c net.Conn) error {
+func respond(cmd *core.RedisCmd, c io.Writer) error {
 	resp, err := core.Eval(cmd)
 	if err != nil {
 		respondError(err, c)

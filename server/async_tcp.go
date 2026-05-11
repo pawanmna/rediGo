@@ -2,64 +2,110 @@
 package server
 
 import (
-	"io"
 	"log"
 	"net"
-	"strconv"
-	"sync/atomic"
+	"syscall"
 
 	"github.com/pawanmna/rediGo/config"
+	"github.com/pawanmna/rediGo/core"
 )
 
-var concurrentClients int64
+var con_clients int = 0
 
-func handleConn(conn net.Conn) {
-	defer conn.Close()
+func RunAsyncTCPServer() error {
+	log.Println("starting an asynchronous TCP server on", config.Host, config.Port)
 
-	n := atomic.AddInt64(&concurrentClients, 1)
-	log.Println("connected to new client at address:", conn.RemoteAddr(), "concurrent clients", n)
+	max_clients := 20000
 
-	defer func() {
-		n := atomic.AddInt64(&concurrentClients, -1)
-		log.Println("disconnected client", conn.RemoteAddr(), "concurrent clients", n)
-	}()
+	// Create EPOLL Event Objects to hold events
+	var events []syscall.EpollEvent = make([]syscall.EpollEvent, max_clients)
 
-	for {
-		cmd, err := readCommand(conn)
-		if err != nil {
-			if err == io.EOF {
-				return
-			}
-			log.Println("read error:", err)
-			return
-		}
-
-		log.Println("command:", cmd)
-
-		if err := respond(cmd, conn); err != nil {
-			log.Println("write/eval error:", err)
-			return
-		}
+	// Create a socket
+	serverFD, err := syscall.Socket(syscall.AF_INET, syscall.O_NONBLOCK|syscall.SOCK_STREAM, 0)
+	if err != nil {
+		return err
 	}
-}
+	defer syscall.Close(serverFD)
 
-func RunAsyncTCPServer() {
-	addr := config.Host + ":" + strconv.Itoa(config.Port)
-	log.Println("starting an asynchronous TCP server on", addr)
+	// Set the Socket operate in a non-blocking mode
+	if err = syscall.SetNonblock(serverFD, true); err != nil {
+		return err
+	}
 
-	ln, err := net.Listen("tcp", addr)
+	// Bind the IP and the port
+	ip4 := net.ParseIP(config.Host)
+	if err = syscall.Bind(serverFD, &syscall.SockaddrInet4{
+		Port: config.Port,
+		Addr: [4]byte{ip4[0], ip4[1], ip4[2], ip4[3]},
+	}); err != nil {
+		return err
+	}
+
+	// Start listening
+	if err = syscall.Listen(serverFD, max_clients); err != nil {
+		return err
+	}
+
+	// AsyncIO starts here!!
+
+	// creating EPOLL instance
+	epollFD, err := syscall.EpollCreate1(0)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer ln.Close()
+	defer syscall.Close(epollFD)
+
+	// Specify the events we want to get hints about
+	// and set the socket on which
+	var socketServerEvent syscall.EpollEvent = syscall.EpollEvent{
+		Events: syscall.EPOLLIN,
+		Fd:     int32(serverFD),
+	}
+
+	// Listen to read events on the Server itself
+	if err = syscall.EpollCtl(epollFD, syscall.EPOLL_CTL_ADD, serverFD, &socketServerEvent); err != nil {
+		return err
+	}
 
 	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			log.Println("accept error:", err)
+		// see if any FD is ready for an IO
+		nevents, e := syscall.EpollWait(epollFD, events[:], -1)
+		if e != nil {
 			continue
 		}
 
-		go handleConn(conn)
+		for i := 0; i < nevents; i++ {
+			// if the socket server itself is ready for an IO
+			if int(events[i].Fd) == serverFD {
+				// accept the incoming connection from a client
+				fd, _, err := syscall.Accept(serverFD)
+				if err != nil {
+					log.Println("err", err)
+					continue
+				}
+
+				// increase the number of concurrent clients count
+				con_clients++
+				syscall.SetNonblock(serverFD, true)
+
+				// add this new TCP connection to be monitored
+				var socketClientEvent syscall.EpollEvent = syscall.EpollEvent{
+					Events: syscall.EPOLLIN,
+					Fd:     int32(fd),
+				}
+				if err := syscall.EpollCtl(epollFD, syscall.EPOLL_CTL_ADD, fd, &socketClientEvent); err != nil {
+					log.Fatal(err)
+				}
+			} else {
+				comm := core.FDComm{Fd: int(events[i].Fd)}
+				cmd, err := readCommand(comm)
+				if err != nil {
+					syscall.Close(int(events[i].Fd))
+					con_clients -= 1
+					continue
+				}
+				respond(cmd, comm)
+			}
+		}
 	}
 }
