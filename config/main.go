@@ -1,4 +1,4 @@
-// package config provides the host and port
+// Package config provides the host and port
 package config
 
 var (
