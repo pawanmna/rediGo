@@ -42,7 +42,12 @@ func readSimpleString(data []byte) (any, int, error) {
 	for pos < len(data) && data[pos] != '\r' {
 		pos++
 	}
-
+	if pos+2 > len(data) {
+		return nil, 0, errors.New("incomplete bulk string")
+	}
+	if data[pos] != 'r' || data[pos+1] != '\n' {
+		return nil, 0, errors.New("invalid terminator")
+	}
 	return string(data[1:pos]), pos + 2, nil
 }
 
@@ -61,6 +66,13 @@ func readInt(data []byte) (any, int, error) {
 		pos++
 	}
 
+	if pos+2 > len(data) {
+		return nil, 0, errors.New("incomplete integer")
+	}
+	if data[pos] != '\r' || data[pos+1] != '\n' {
+		return nil, 0, errors.New("invalid terminator")
+	}
+
 	v, err := strconv.ParseInt(string(data[1:pos]), 10, 64)
 	if err != nil {
 		return 0, 0, err
@@ -76,9 +88,15 @@ func readBulkString(data []byte) (any, int, error) {
 		return nil, 0, err
 	}
 	length := int(x.(int64))
+	if pos+length+2 > len(data) {
+		return nil, 0, errors.New("incomplete bulk string")
+	}
 
-	return string(data[pos:(pos + length)]), length + pos + 2, nil
-	// 1. read length
+	if data[pos+length] != '\r' || data[pos+length+1] != '\n' {
+		return nil, 0, errors.New("invalid bulk string terminator")
+	}
+
+	return string(data[pos:(pos + length)]), length + pos + 2, nil // 1. read length
 	// 2. advance position
 	// 3. read `length` bytes
 }
@@ -88,6 +106,10 @@ func readArray(data []byte) (any, int, error) {
 	// TODO:
 	// 1. read element count
 	// 2. loop and decode each element
+	if len(data) < 4 {
+		return nil, 0, errors.New("invalid array")
+	}
+
 	x, pos, err := readInt(data)
 	if err != nil {
 		return nil, 0, err
@@ -147,9 +169,9 @@ func Encode(arg any, isSimple bool) ([]byte, error) {
 	switch v := arg.(type) {
 	case string:
 		if isSimple {
-			return []byte(fmt.Sprintf("+%s\r\n", v)), nil
+			return fmt.Appendf(nil, "+%s\r\n", v), nil
 		}
-		return []byte(fmt.Sprintf("$%d\r\n%s\r\n", len(v), v)), nil
+		return fmt.Appendf(nil, "$%d\r\n%s\r\n", len(v), v), nil
 	}
 	return []byte{}, errors.New("empty")
 }

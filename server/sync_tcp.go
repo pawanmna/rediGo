@@ -13,11 +13,12 @@ import (
 	"github.com/pawanmna/rediGo/core"
 )
 
-func respondError(err error, c net.Conn) {
+// Replaced net.Conn with io.Writer/Reader
+func respondError(err error, c io.Writer) {
 	c.Write((fmt.Appendf(nil, "-%s\r\n", err)))
 }
 
-func readCommand(c net.Conn) (*core.RedisCmd, error) {
+func readCommand(c io.Reader) (*core.RedisCmd, error) {
 	buf := make([]byte, 512) // the max size of the message passed to the server can be 512 bytes, make() create a slice
 
 	n, err := c.Read(buf[:]) // Read return the size and error and add the command to buf slice
@@ -38,14 +39,11 @@ func respond(cmd *core.RedisCmd, c net.Conn) error {
 	resp, err := core.Eval(cmd)
 	if err != nil {
 		respondError(err, c)
+		return err
 	}
 
 	_, err = c.Write(resp)
-	if err != nil {
-		respondError(err, c)
-	}
-
-	return nil
+	return err
 }
 
 func RunSyncTCPServer() {

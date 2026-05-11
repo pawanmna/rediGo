@@ -1,10 +1,13 @@
 package core
 
-import "errors"
+import (
+	"errors"
+	"strings"
+)
 
 func evalPing(args []string) ([]byte, error) {
 	if len(args) >= 2 {
-		return nil, errors.New("the number of arguments cannot be > 1 for PING")
+		return nil, errors.New("ERR wrong number of arguments for PING")
 	}
 
 	if len(args) == 0 {
@@ -19,6 +22,8 @@ func Eval(cmd *RedisCmd) ([]byte, error) {
 	case "PING":
 		return evalPing(cmd.Args)
 	default:
-		return []byte{}, errors.New("unknown command")
+		return nil, errors.New(
+			"ERR unknown command '" + strings.ToLower(cmd.Cmd) + "'",
+		)
 	}
 }
